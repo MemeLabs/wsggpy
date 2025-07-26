@@ -1,0 +1,30 @@
+
+# Python Formatting and Linting Standards
+
+This project uses Ruff for both linting and formatting as configured in [pyproject.toml](mdc:pyproject.toml).
+
+## Code Formatting with Ruff
+- **Ruff format**: Line length of 88 characters, target Python 3.13+
+- **All-in-one**: Ruff handles both linting and formatting (replaces Black, isort, flake8)
+- Always run `ruff check --fix .` and `ruff format .` before committing code
+
+## Linting with Ruff
+- Target Python 3.13+ with comprehensive rule set enabled
+- Key rules: pycodestyle (E/W), pyflakes (F), isort (I), flake8-bugbear (B), comprehensions (C4), pyupgrade (UP)
+- Line length enforcement handled by ruff format, not linter (E501 ignored)
+
+## Pre-commit Workflow
+1. Lint and fix: `ruff check --fix src/ tests/ examples/`
+2. Format code: `ruff format src/ tests/ examples/`
+3. Type check: `mypy src/`
+4. Run tests: `pytest`
+
+## Code Quality Standards
+- Always prefer f-strings over `.format()` or `%` formatting
+- Use list/dict comprehensions where appropriate (but keep them readable)
+- Follow PEP 8 naming conventions strictly
+- Add docstrings to all public functions, classes, and modules
+- Keep functions focused and under 50 lines when possible
+
+- Add docstrings to all public functions, classes, and modules
+- Keep functions focused and under 50 lines when possible

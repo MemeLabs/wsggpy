@@ -1,0 +1,45 @@
+---
+globs: test_*.py,*_test.py,tests/*.py
+---
+
+# Python Testing Standards
+
+## Test Structure and Organization
+- Follow the project's pytest configuration in [pyproject.toml](mdc:pyproject.toml)
+- Test files should mirror the source structure: `tests/test_module.py` for `src/wsggpy/module.py`
+- Use descriptive test function names: `test_session_connects_successfully_with_valid_credentials`
+
+## Test Quality Guidelines
+- **Arrange-Act-Assert**: Structure tests clearly with setup, execution, and verification
+- One assertion per test when possible, multiple related assertions are acceptable
+- Use pytest fixtures for common setup/teardown
+- Mock external dependencies appropriately
+
+## Coverage Requirements
+- Maintain high test coverage (target 90%+)
+- Focus on testing public APIs and critical paths
+- Don't test trivial getters/setters unless they have logic
+- Use `pytest --cov=src/wsggpy --cov-report=html` to generate coverage reports
+
+## Async Testing
+- Use `pytest-asyncio` for async test functions
+- Mark async tests with `@pytest.mark.asyncio` or use `asyncio_mode = "auto"`
+- Properly clean up async resources in tests
+- Test both success and failure scenarios for async operations
+
+## Test Data and Fixtures
+- Use fixtures for reusable test data and setup
+- Keep test data minimal and focused on the test scenario
+- Use `pytest.parametrize` for testing multiple inputs
+- Avoid hardcoded values, use constants or fixtures
+
+## Mocking and Patching
+- Mock external services, file I/O, and network calls
+- Use `unittest.mock.patch` or `pytest-mock` for mocking
+- Verify mock calls when testing integration points
+- Don't mock the code under test, only its dependencies
+
+## Test Markers and Categories
+- Use `@pytest.mark.slow` for tests that take >1 second
+- Use `@pytest.mark.integration` for integration tests
+- Run fast tests during development: `pytest -m "not slow"`

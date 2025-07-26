@@ -1,0 +1,78 @@
+
+# Python Development Workflow
+
+## Pre-commit Hooks Setup
+Based on the configuration in [pyproject.toml](mdc:pyproject.toml), install and configure pre-commit hooks:
+
+```bash
+# Install pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# Run hooks manually
+pre-commit run --all-files
+```
+
+## Development Environment Setup
+1. **Virtual Environment**: Always use a virtual environment
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # or venv\Scripts\activate  # Windows
+   ```
+
+2. **Install Dependencies**: Install with dev dependencies
+   ```bash
+   pip install -e ".[dev]"
+   ```
+
+3. **IDE Configuration**: Configure your IDE for the tools in [pyproject.toml](mdc:pyproject.toml)
+
+## Code Quality Checks
+Run these commands before committing:
+
+```bash
+# Lint and fix code
+ruff check --fix src/ tests/ examples/
+
+# Format code
+ruff format src/ tests/ examples/
+
+# Type checking
+mypy src/
+
+# Run tests with coverage
+pytest --cov=src/wsggpy --cov-report=html
+```
+
+## Git Workflow
+- **Commit Messages**: Use conventional commits format
+  - `feat:` for new features
+  - `fix:` for bug fixes
+  - `docs:` for documentation
+  - `test:` for tests
+  - `refactor:` for refactoring
+
+- **Branch Naming**: Use descriptive branch names
+  - `feature/add-reconnection-logic`
+  - `fix/memory-leak-in-session`
+  - `docs/update-api-examples`
+
+## Continuous Integration
+Ensure CI pipeline runs:
+1. Code linting and formatting (Ruff)
+2. Type checking (mypy)
+3. Tests with coverage
+4. Security scanning (if applicable)
+
+## Release Checklist
+Before releasing:
+1. All tests pass
+2. Coverage meets threshold (90%+)
+3. Documentation is updated
+4. Version is bumped in `pyproject.toml`
+5. Changelog is updated
+6. Examples are tested and working
+
+5. Changelog is updated
+6. Examples are tested and working

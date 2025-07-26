@@ -1,0 +1,59 @@
+
+# MyPy Type Checking Standards
+
+This project uses strict mypy configuration as defined in [pyproject.toml](mdc:pyproject.toml).
+
+## Strict Mode Requirements
+- **No `Any` types**: All variables, parameters, and returns must be properly typed
+- **No untyped functions**: Every function must have complete type annotations
+- **No implicit Optional**: Use `Optional[T]` or `T | None` explicitly
+
+## Type Annotation Best Practices
+- Use modern union syntax: `str | int` instead of `Union[str, int]` (Python 3.13+)
+- Use `Sequence[T]` for read-only collections, `list[T]` for mutable lists
+- Use `Mapping[K, V]` for read-only dicts, `dict[K, V]` for mutable dicts
+- Prefer `Iterable[T]` for function parameters that iterate over data
+
+## Common Type Patterns
+```python
+# Protocol types for structural typing
+from typing import Protocol
+
+class Readable(Protocol):
+    def read(self) -> str: ...
+
+# Generic types
+from typing import TypeVar, Generic
+T = TypeVar('T')
+
+class Container(Generic[T]):
+    def __init__(self, value: T) -> None:
+        self.value = value
+```
+
+## Handling Complex Types
+- Use `TypedDict` for structured dictionary data
+- Use `Literal` for string/enum constants
+- Use `overload` for functions with multiple signatures
+- Use `cast()` sparingly and only when mypy can't infer correctly
+
+## Async Type Annotations
+- Use `Coroutine[Any, Any, T]` for coroutine return types
+- Use `AsyncIterator[T]` and `AsyncGenerator[T, None]` for async iterators
+- Async context managers should use `AsyncContextManager[T]`
+
+## Type Ignores and Suppressions
+- Avoid `# type: ignore` comments unless absolutely necessary
+- When using `# type: ignore`, add a specific comment explaining why
+- Prefer fixing the type issue over ignoring it
+- Use `# type: ignore[error-code]` for specific mypy errors
+
+## Integration with Pydantic
+- Use Pydantic models for data validation and serialization
+- Leverage Pydantic's automatic type validation
+- Use `BaseModel.model_validate()` for external data
+- Configure Pydantic with proper type checking in mind
+
+- Leverage Pydantic's automatic type validation
+- Use `BaseModel.model_validate()` for external data
+- Configure Pydantic with proper type checking in mind

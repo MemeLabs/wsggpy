@@ -1,0 +1,47 @@
+
+# WSGGPY Project Structure Guide
+
+## Core Architecture
+- **Main entry**: [main.py](mdc:main.py) - Example usage and CLI interface
+- **Source code**: `src/wsggpy/` - All library code
+- **Tests**: `tests/` - Test files mirroring source structure
+- **Examples**: `examples/` - Usage examples for both sync and async
+
+## Source Code Organization
+
+### Core Modules
+- [protocol.py](mdc:src/wsggpy/protocol.py) - WebSocket protocol handling
+- [models.py](mdc:src/wsggpy/models.py) - Pydantic data models for chat messages
+- [session.py](mdc:src/wsggpy/session.py) - Synchronous WebSocket session
+- [async_session.py](mdc:src/wsggpy/async_session.py) - Asynchronous WebSocket session
+- [handlers.py](mdc:src/wsggpy/handlers.py) - Message and event handlers
+- [exceptions.py](mdc:src/wsggpy/exceptions.py) - Custom exception classes
+- [__init__.py](mdc:src/wsggpy/__init__.py) - Public API exports
+
+## Development Workflow
+1. **Code changes**: Edit files in `src/wsggpy/`
+2. **Add tests**: Create corresponding tests in `tests/`
+3. **Run checks**: Use Ruff for linting and formatting as configured in [pyproject.toml](mdc:pyproject.toml)
+4. **Update examples**: Modify [examples/](mdc:examples/) if API changes
+
+## Import Guidelines
+- Internal imports: Use relative imports within the package
+- External dependencies: Import from the packages listed in [pyproject.toml](mdc:pyproject.toml)
+- Type imports: Use `from typing import` for type annotations
+
+## File Naming Conventions
+- Python modules: `snake_case.py`
+- Test files: `test_module_name.py`
+- Example files: `descriptive_name.py`
+- Configuration: Use standard names (`pyproject.toml`, `README.md`)
+
+## Adding New Features
+1. Define data models in [models.py](mdc:src/wsggpy/models.py) if needed
+2. Implement core logic in appropriate module
+3. Add corresponding tests in `tests/`
+4. Update [__init__.py](mdc:src/wsggpy/__init__.py) exports if public API
+5. Create example usage in `examples/` directory
+6. Update documentation as needed
+
+5. Create example usage in `examples/` directory
+6. Update documentation as needed

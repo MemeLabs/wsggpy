@@ -1,0 +1,41 @@
+
+# Python Code Quality Guidelines
+
+## Type Hints and Annotations
+- **Mandatory**: All function parameters and return types must have type hints
+- Use modern typing syntax (Python 3.13+ style): `list[str]` not `List[str]`
+- Import from `typing` only when needed for complex types
+- Use `typing_extensions` for compatibility when needed
+
+## Error Handling
+- Always use specific exception types, avoid bare `except:`
+- Create custom exceptions in [exceptions.py](mdc:src/wsggpy/exceptions.py) when needed
+- Use context managers (`with` statements) for resource management
+- Log exceptions with appropriate detail level
+
+## Code Organization
+- Follow the project structure: source in `src/wsggpy/`, tests in `tests/`
+- Keep modules focused and cohesive
+- Use `__init__.py` files to control public API exports
+- Prefer composition over inheritance
+
+## Documentation Standards
+- All public APIs must have comprehensive docstrings
+- Use Google/Sphinx docstring format
+- Include type information in docstrings when complex
+- Add inline comments for complex business logic
+
+## Performance and Best Practices
+- Use `pathlib.Path` instead of `os.path` for file operations
+- Prefer `datetime.datetime.now(tz=...)` over naive datetime objects
+- Use dataclasses or Pydantic models for structured data
+- Avoid premature optimization, but be mindful of common performance pitfalls
+
+## Async Code Guidelines (when applicable)
+- Use `async`/`await` consistently, avoid mixing sync/async patterns
+- Prefer `asyncio.gather()` for concurrent operations
+- Use `asyncio.create_task()` for fire-and-forget operations
+- Always handle `asyncio.CancelledError` in long-running tasks
+
+- Use `asyncio.create_task()` for fire-and-forget operations
+- Always handle `asyncio.CancelledError` in long-running tasks

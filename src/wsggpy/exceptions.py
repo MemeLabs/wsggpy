@@ -38,6 +38,12 @@ class MessageError(WSGGError):
     pass
 
 
+class DuplicateMessageError(MessageError):
+    """Raised when server rejects a duplicate message."""
+
+    pass
+
+
 class ProtocolError(WSGGError):
     """Raised when protocol parsing fails."""
 

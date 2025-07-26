@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, TypeVar
 
-from .exceptions import ProtocolError
+from .exceptions import DuplicateMessageError, ProtocolError
 from .models import (
     Ban,
     Broadcast,
@@ -55,6 +55,11 @@ class ProtocolHandler:
         """Parse a raw websocket message into an event object."""
         try:
             if not raw_message.strip():
+                return None
+
+            # Handle ERR messages that may not be JSON (e.g., 'ERR "duplicate"')
+            if raw_message.startswith("ERR "):
+                self._handle_error_message(raw_message)
                 return None
 
             # Check for prefix-based messages first (e.g., "NAMES {...}", "MSG {...}", "JOIN {...}")
@@ -213,6 +218,27 @@ class ProtocolHandler:
         except Exception as e:
             logger.error(f"Failed to parse message '{raw_message}': {e}")
             raise ProtocolError(f"Failed to parse message: {e}") from e
+
+    def _handle_error_message(self, raw_message: str) -> None:
+        """Handle ERR messages that may not be in JSON format.
+
+        Args:
+            raw_message: Raw message starting with "ERR "
+
+        Raises:
+            DuplicateMessageError: If the error is about duplicate messages
+            ProtocolError: For other types of errors
+        """
+        # Extract the error content after "ERR "
+        error_content = raw_message[4:].strip()
+
+        # Handle specific error types
+        if error_content == '"duplicate"' or error_content == "duplicate":
+            logger.warning("Server rejected duplicate message")
+            raise DuplicateMessageError("Message was rejected as duplicate")
+        else:
+            logger.error(f"Server error: {error_content}")
+            raise ProtocolError(f"Server error: {error_content}")
 
     def format_message(self, message: str) -> str:
         """Format an outgoing chat message for transmission.

@@ -4,12 +4,14 @@ Provides a synchronous interface for connecting to and interacting with
 strims.gg chat via websockets.
 """
 
+import hashlib
 import logging
 import threading
+import time
 
 import websocket  # websocket-client package
 
-from .exceptions import ConnectionError, MessageError, WSGGError
+from .exceptions import ConnectionError, DuplicateMessageError, MessageError, WSGGError
 from .handlers import (
     ErrorHandlerFunc,
     EventHandlers,
@@ -50,6 +52,11 @@ class Session:
         self._running = False
         self._users: dict[str, User] = {}
         self._listen_thread: threading.Thread | None = None
+
+        # Message deduplication
+        self._message_cache: dict[str, float] = {}  # hash -> timestamp
+        self._cache_ttl = 300.0  # 5 minutes
+        self._max_cache_size = 1000
 
         # Protocol and event handling
         self.protocol = ProtocolHandler()
@@ -190,10 +197,18 @@ class Session:
         if not self._connected or not self._ws:
             raise ConnectionError("Not connected")
 
+        # Check for duplicate
+        if self._is_duplicate_message(message):
+            logger.warning(f"Preventing duplicate message: {message[:50]}...")
+            return
+
         try:
             formatted_msg = self.protocol.format_message(message)
             self._ws.send(formatted_msg)
             logger.debug(f"Sent message: {message}")
+        except DuplicateMessageError:
+            logger.warning("Server rejected message as duplicate")
+            # Don't re-raise, just log and continue
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             raise MessageError(f"Failed to send message: {e}") from e
@@ -447,6 +462,45 @@ class Session:
         self.handlers.add_generic_handler(handler)
 
     # Internal methods
+    def _generate_message_hash(self, message: str) -> str:
+        """Generate a hash for message deduplication."""
+        return hashlib.sha256(message.encode("utf-8")).hexdigest()[:16]
+
+    def _cleanup_message_cache(self) -> None:
+        """Remove expired messages from cache."""
+        current_time = time.time()
+        expired_hashes = [
+            msg_hash
+            for msg_hash, timestamp in self._message_cache.items()
+            if current_time - timestamp > self._cache_ttl
+        ]
+        for msg_hash in expired_hashes:
+            del self._message_cache[msg_hash]
+
+        # Limit cache size
+        if len(self._message_cache) > self._max_cache_size:
+            # Remove oldest entries
+            sorted_items = sorted(self._message_cache.items(), key=lambda x: x[1])
+            excess_count = len(self._message_cache) - self._max_cache_size + 100
+            for msg_hash, _ in sorted_items[:excess_count]:
+                del self._message_cache[msg_hash]
+
+    def _is_duplicate_message(self, message: str) -> bool:
+        """Check if message is a recent duplicate."""
+        msg_hash = self._generate_message_hash(message)
+        current_time = time.time()
+
+        if msg_hash in self._message_cache:
+            # Check if message is within duplicate time window
+            time_diff = current_time - self._message_cache[msg_hash]
+            if time_diff < self._cache_ttl:
+                return True
+
+        # Add to cache
+        self._message_cache[msg_hash] = current_time
+        self._cleanup_message_cache()
+        return False
+
     def _listen_loop(self) -> None:
         """Main listening loop for incoming messages."""
         logger.debug("Starting message listen loop")
@@ -478,6 +532,9 @@ class Session:
                     event = self.protocol.parse_message(message_str)
                     if event:
                         self._handle_event(event)
+                except DuplicateMessageError:
+                    # Duplicate messages are expected, just log and continue
+                    logger.debug("Received duplicate message from server")
                 except Exception as e:
                     logger.error(f"Failed to parse message: {e}")
                     self.handlers.dispatch_error(f"Failed to parse message: {e}", self)

@@ -39,7 +39,13 @@ Example:
 """
 
 from .async_session import AsyncSession
-from .exceptions import ConnectionError, MessageError, ProtocolError, WSGGError
+from .exceptions import (
+    ConnectionError,
+    DuplicateMessageError,
+    MessageError,
+    ProtocolError,
+    WSGGError,
+)
 from .models import (
     Ban,
     Broadcast,
@@ -93,6 +99,7 @@ __all__ = [
     # Exceptions
     "WSGGError",
     "ConnectionError",
+    "DuplicateMessageError",
     "MessageError",
     "ProtocolError",
 ]

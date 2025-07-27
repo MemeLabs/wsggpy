@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from datetime import datetime
 from typing import Any
 
 import aiohttp
@@ -19,7 +20,14 @@ from .handlers import (
     HandlerFunc,
     SocketErrorHandlerFunc,
 )
-from .models import EventType, User
+from .models import (
+    DisconnectEvent,
+    EventType,
+    ReconnectedEvent,
+    ReconnectFailedEvent,
+    ReconnectingEvent,
+    User,
+)
 from .protocol import ProtocolHandler
 
 logger = logging.getLogger(__name__)
@@ -60,6 +68,13 @@ class AsyncSession:
         self._cache_ttl = 300.0  # 5 minutes
         self._max_cache_size = 1000
 
+        # Reconnection state
+        self._reconnecting = False
+        self._current_attempts = 0
+        self._last_disconnect_time: float | None = None
+        self._auto_reconnect = True
+        self._reconnect_task: asyncio.Task[None] | None = None
+
         # Protocol and event handling
         self.protocol = ProtocolHandler()
         self.handlers = EventHandlers()
@@ -69,6 +84,10 @@ class AsyncSession:
         self._ping_timeout = 10.0  # seconds
         self._reconnect_attempts = 3
         self._reconnect_delay = 5.0  # seconds
+
+    def _calculate_backoff_delay(self, attempt: int) -> float:
+        """Calculate exponential backoff delay for reconnection attempts."""
+        return float(min(self._reconnect_delay * (2**attempt), 60.0))  # Max 60 seconds
 
     def set_url(self, url: str) -> None:
         """Set the websocket URL."""
@@ -119,6 +138,135 @@ class AsyncSession:
         self._cleanup_message_cache()
         return False
 
+    # Configuration methods
+    def set_auto_reconnect(self, enabled: bool) -> None:
+        """Enable or disable automatic reconnection.
+
+        Args:
+            enabled: Whether to automatically reconnect on disconnection
+        """
+        self._auto_reconnect = enabled
+
+    def set_reconnect_config(self, attempts: int, delay: float) -> None:
+        """Configure reconnection behavior.
+
+        Args:
+            attempts: Maximum number of reconnection attempts
+            delay: Base delay between attempts in seconds (will use exponential backoff)
+        """
+        if attempts < 0:
+            raise ValueError("Reconnect attempts must be non-negative")
+        if delay < 0:
+            raise ValueError("Reconnect delay must be non-negative")
+
+        self._reconnect_attempts = attempts
+        self._reconnect_delay = delay
+
+    def is_reconnecting(self) -> bool:
+        """Check if currently attempting to reconnect."""
+        return self._reconnecting
+
+    def get_connection_info(self) -> dict[str, Any]:
+        """Get detailed connection state information."""
+        return {
+            "connected": self._connected,
+            "reconnecting": self._reconnecting,
+            "attempts": self._current_attempts,
+            "last_disconnect": self._last_disconnect_time,
+            "auto_reconnect": self._auto_reconnect,
+        }
+
+    async def force_reconnect(self) -> None:
+        """Manually trigger a reconnection attempt."""
+        if self._connected:
+            logger.info("Forcing reconnection - closing current connection")
+            await self.close()
+
+        self._current_attempts = 0
+        await self._attempt_reconnection()
+
+    async def _handle_disconnect(self, reason: str = "unknown") -> None:
+        """Handle disconnection and attempt reconnection if enabled."""
+        if self._reconnecting:
+            # Already handling disconnection
+            return
+
+        self._last_disconnect_time = time.time()
+        logger.warning(f"Disconnected from chat: {reason}")
+
+        # Create and dispatch disconnect event
+        disconnect_event = DisconnectEvent(reason=reason, timestamp=datetime.now())
+        self.handlers.dispatch_event(disconnect_event, self)
+
+        # Attempt reconnection if enabled
+        if self._auto_reconnect and self._current_attempts < self._reconnect_attempts:
+            self._reconnect_task = asyncio.create_task(self._attempt_reconnection())
+        else:
+            # Final cleanup if no more attempts
+            await self._cleanup()
+
+            # Dispatch reconnect failed event
+            if self._current_attempts >= self._reconnect_attempts:
+                failed_event = ReconnectFailedEvent(
+                    total_attempts=self._current_attempts, timestamp=datetime.now()
+                )
+                self.handlers.dispatch_event(failed_event, self)
+
+    async def _attempt_reconnection(self) -> None:
+        """Attempt to reconnect with exponential backoff."""
+        self._reconnecting = True
+        self._current_attempts += 1
+
+        # Calculate delay with exponential backoff
+        delay = self._calculate_backoff_delay(self._current_attempts - 1)
+
+        logger.info(
+            f"Attempting reconnection {self._current_attempts}/{self._reconnect_attempts} in {delay:.1f}s"
+        )
+
+        # Create and dispatch reconnecting event
+        reconnecting_event = ReconnectingEvent(
+            attempt=self._current_attempts, delay=delay, timestamp=datetime.now()
+        )
+        self.handlers.dispatch_event(reconnecting_event, self)
+
+        # Wait before attempting
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            self._reconnecting = False
+            raise
+
+        try:
+            # Attempt to reopen connection
+            await self.open()
+
+            # Create and dispatch successful reconnection event
+            reconnected_event = ReconnectedEvent(
+                attempts_taken=self._current_attempts, timestamp=datetime.now()
+            )
+            self.handlers.dispatch_event(reconnected_event, self)
+
+            logger.info(
+                f"Reconnected successfully after {self._current_attempts} attempts"
+            )
+
+        except Exception as e:
+            logger.error(f"Reconnection attempt {self._current_attempts} failed: {e}")
+
+            # Try again or give up
+            if self._current_attempts < self._reconnect_attempts:
+                self._reconnect_task = asyncio.create_task(self._attempt_reconnection())
+            else:
+                self._reconnecting = False
+                await self._cleanup()
+
+                # Dispatch final failure event
+                failed_event = ReconnectFailedEvent(
+                    total_attempts=self._current_attempts, timestamp=datetime.now()
+                )
+                self.handlers.dispatch_event(failed_event, self)
+
     async def open(self) -> None:
         """Open a connection to the chat server."""
         if self._connected:
@@ -143,6 +291,10 @@ class AsyncSession:
             self._connected = True
             self._running = True
 
+            # Reset reconnection state on successful connection
+            self._reconnecting = False
+            self._current_attempts = 0
+
             # Start listening task
             self._listen_task = asyncio.create_task(self._listen_loop())
 
@@ -159,7 +311,18 @@ class AsyncSession:
             return
 
         logger.info("Closing connection")
+
+        # Disable auto-reconnect on manual close
+        self._auto_reconnect = False
         self._running = False
+
+        # Cancel any ongoing reconnection attempts
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
 
         # Cancel listen task
         if self._listen_task and not self._listen_task.done():
@@ -181,7 +344,12 @@ class AsyncSession:
 
     def is_connected(self) -> bool:
         """Check if the session is connected."""
-        return self._connected and self._ws is not None and not self._ws.closed
+        return (
+            self._connected
+            and not self._reconnecting
+            and self._ws is not None
+            and not self._ws.closed
+        )
 
     # User management
     def get_users(self) -> list[User]:
@@ -361,6 +529,22 @@ class AsyncSession:
         """Add a handler that receives all events."""
         self.handlers.add_generic_handler(handler)
 
+    def add_disconnect_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for disconnection events."""
+        self.handlers.add_disconnect_handler(handler)
+
+    def add_reconnecting_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for reconnection attempt events."""
+        self.handlers.add_reconnecting_handler(handler)
+
+    def add_reconnected_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for successful reconnection events."""
+        self.handlers.add_reconnected_handler(handler)
+
+    def add_reconnect_failed_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for failed reconnection events."""
+        self.handlers.add_reconnect_failed_handler(handler)
+
     # Context manager support
     async def __aenter__(self) -> "AsyncSession":
         """Enter the async context manager by opening the connection."""
@@ -409,10 +593,11 @@ class AsyncSession:
                         logger.error(f"WebSocket error: {ws_exception}")
                         if isinstance(ws_exception, Exception):
                             self.handlers.dispatch_socket_error(ws_exception, self)
+                    await self._handle_disconnect("websocket error")
                     break
 
                 elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING):
-                    logger.info("WebSocket connection closed")
+                    await self._handle_disconnect("server closed connection")
                     break
 
         except asyncio.CancelledError:
@@ -420,9 +605,11 @@ class AsyncSession:
         except Exception as e:
             logger.error(f"Error in async listen loop: {e}")
             self.handlers.dispatch_socket_error(e, self)
+            await self._handle_disconnect(f"listen loop error: {e}")
 
         logger.debug("Async listen loop ended")
-        await self._cleanup()
+        if not self._reconnecting:
+            await self._cleanup()
 
     async def _handle_event(self, event: EventType) -> None:
         """Handle a parsed event."""
@@ -465,3 +652,7 @@ class AsyncSession:
         self._session = None
         self._users.clear()
         self._listen_task = None
+
+        # Only reset reconnection state if not currently reconnecting
+        if not self._reconnecting:
+            self._current_attempts = 0

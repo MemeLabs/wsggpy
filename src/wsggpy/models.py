@@ -1,17 +1,17 @@
-"""Data models for wsggpy chat events and objects.
+"""Data models for wsggpy.
 
-These models represent all the different types of events and objects
-that can be received from or sent to the strims.gg chat API.
+Defines Pydantic models for chat events and user data structures.
+All models are immutable and provide type-safe representations of
+chat protocol messages.
 """
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
-class UserFeature(str, Enum):
+class UserFeature(Enum):
     """User feature flags."""
 
     ADMIN = "admin"
@@ -21,130 +21,163 @@ class UserFeature(str, Enum):
 
 
 class User(BaseModel):
-    """Represents a chat user."""
+    """A chat user."""
 
-    model_config = ConfigDict(frozen=True)
-
-    id: int = Field(..., description="Unique user ID")
-    nick: str = Field(..., description="Username/nickname")
+    id: int = Field(description="Unique user ID")
+    nick: str = Field(description="User's display name")
     features: list[UserFeature] = Field(
-        default_factory=list, description="User feature flags"
+        default_factory=list, description="User features/permissions"
     )
 
     def has_feature(self, feature: UserFeature) -> bool:
         """Check if user has a specific feature."""
         return feature in self.features
 
+    def is_admin(self) -> bool:
+        """Check if user is an admin."""
+        return self.has_feature(UserFeature.ADMIN)
+
+    def is_moderator(self) -> bool:
+        """Check if user is a moderator."""
+        return self.has_feature(UserFeature.MODERATOR)
+
+    def is_bot(self) -> bool:
+        """Check if user is a bot."""
+        return self.has_feature(UserFeature.BOT)
+
+    def is_protected(self) -> bool:
+        """Check if user is protected."""
+        return self.has_feature(UserFeature.PROTECTED)
+
 
 class Message(BaseModel):
-    """Represents a chat message."""
+    """A chat message."""
 
-    model_config = ConfigDict(frozen=True)
-
-    sender: User = Field(..., description="Message sender")
-    message: str = Field(..., description="Message content")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Message timestamp"
-    )
+    sender: User = Field(description="User who sent the message")
+    message: str = Field(description="Message content")
+    timestamp: datetime = Field(description="When the message was sent")
 
     def is_action(self) -> bool:
-        """Check if message is an action (/me command)."""
+        """Check if this is an action message (/me command)."""
         return self.message.startswith("/me ")
+
+    def get_action_text(self) -> str | None:
+        """Get action text if this is an action message."""
+        if self.is_action():
+            return self.message[4:]  # Remove "/me " prefix
+        return None
 
 
 class PrivateMessage(BaseModel):
-    """Represents a private message."""
+    """A private message between users."""
 
-    model_config = ConfigDict(frozen=True)
-
-    sender: User = Field(..., description="Message sender")
-    recipient: User = Field(..., description="Message recipient")
-    message: str = Field(..., description="Message content")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Message timestamp"
-    )
+    sender: User = Field(description="User who sent the message")
+    recipient: User = Field(description="User who received the message")
+    message: str = Field(description="Message content")
+    timestamp: datetime = Field(description="When the message was sent")
 
 
 class Ban(BaseModel):
-    """Represents a ban event."""
+    """A ban event."""
 
-    model_config = ConfigDict(frozen=True)
-
-    sender: User = Field(..., description="Moderator who issued the ban")
-    target: User = Field(..., description="User being banned")
-    reason: str = Field(..., description="Ban reason")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Ban timestamp"
-    )
+    sender: User = Field(description="User who issued the ban")
+    target: User = Field(description="User who was banned")
+    reason: str = Field(description="Reason for the ban")
     duration: int | None = Field(
-        None, description="Ban duration in seconds (None for permanent)"
+        description="Ban duration in seconds, None for permanent"
     )
+    timestamp: datetime = Field(description="When the ban was issued")
+
+    def is_permanent(self) -> bool:
+        """Check if this is a permanent ban."""
+        return self.duration is None
 
 
 class Mute(BaseModel):
-    """Represents a mute event."""
+    """A mute event."""
 
-    model_config = ConfigDict(frozen=True)
-
-    sender: User = Field(..., description="Moderator who issued the mute")
-    target: User = Field(..., description="User being muted")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Mute timestamp"
+    sender: User = Field(description="User who issued the mute")
+    target: User = Field(description="User who was muted")
+    duration: int | None = Field(
+        description="Mute duration in seconds, None for permanent"
     )
-    duration: int | None = Field(None, description="Mute duration in seconds")
+    timestamp: datetime = Field(description="When the mute was issued")
+
+    def is_permanent(self) -> bool:
+        """Check if this is a permanent mute."""
+        return self.duration is None
 
 
 class RoomAction(BaseModel):
-    """Represents a user joining/leaving the chat."""
+    """A user join/quit event."""
 
-    model_config = ConfigDict(frozen=True)
-
-    user: User = Field(..., description="User performing the action")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Action timestamp"
-    )
+    user: User = Field(description="User who joined or left")
+    timestamp: datetime = Field(description="When the action occurred")
 
 
 class Broadcast(BaseModel):
-    """Represents a broadcast message."""
+    """A broadcast message from the server."""
 
-    model_config = ConfigDict(frozen=True)
-
-    sender: User = Field(..., description="Broadcast sender")
-    message: str = Field(..., description="Broadcast content")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Broadcast timestamp"
-    )
+    sender: User = Field(description="User who sent the broadcast")
+    message: str = Field(description="Broadcast content")
+    timestamp: datetime = Field(description="When the broadcast was sent")
 
 
 class Ping(BaseModel):
-    """Represents a ping/pong event."""
+    """A ping/pong event."""
 
-    model_config = ConfigDict(frozen=True)
-
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Ping timestamp"
-    )
+    timestamp: datetime = Field(description="When the ping was sent/received")
 
 
 class Names(BaseModel):
-    """Represents a user list update."""
+    """User list update event."""
 
-    model_config = ConfigDict(frozen=True)
-
-    users: list[User] = Field(..., description="List of users in chat")
-    connectioncount: int = Field(..., description="Total number of connected users")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Update timestamp"
-    )
+    users: list[User] = Field(description="List of users in the chat")
+    connectioncount: int = Field(description="Total connection count")
+    timestamp: datetime = Field(description="When the user list was updated")
 
 
-# Union type for all possible events
-if TYPE_CHECKING:
-    EventType = (
-        Message | PrivateMessage | Ban | Mute | RoomAction | Broadcast | Ping | Names
-    )
-else:
-    EventType = (
-        Message | PrivateMessage | Ban | Mute | RoomAction | Broadcast | Ping | Names
-    )
+class DisconnectEvent(BaseModel):
+    """A disconnection event."""
+
+    reason: str = Field(description="Reason for disconnection")
+    timestamp: datetime = Field(description="When the disconnection occurred")
+
+
+class ReconnectingEvent(BaseModel):
+    """A reconnection attempt event."""
+
+    attempt: int = Field(description="Current attempt number")
+    delay: float = Field(description="Delay before this attempt in seconds")
+    timestamp: datetime = Field(description="When the reconnection attempt started")
+
+
+class ReconnectedEvent(BaseModel):
+    """A successful reconnection event."""
+
+    attempts_taken: int = Field(description="Number of attempts it took to reconnect")
+    timestamp: datetime = Field(description="When reconnection succeeded")
+
+
+class ReconnectFailedEvent(BaseModel):
+    """A failed reconnection event (all attempts exhausted)."""
+
+    total_attempts: int = Field(description="Total number of attempts made")
+    timestamp: datetime = Field(description="When reconnection finally failed")
+
+
+# Type alias for all event types
+EventType = (
+    Message
+    | PrivateMessage
+    | Ban
+    | Mute
+    | RoomAction
+    | Broadcast
+    | Ping
+    | Names
+    | DisconnectEvent
+    | ReconnectingEvent
+    | ReconnectedEvent
+    | ReconnectFailedEvent
+)

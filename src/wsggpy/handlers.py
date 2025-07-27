@@ -55,6 +55,12 @@ class EventHandlers:
         self.ping_handlers: list[HandlerFunc] = []
         self.names_handlers: list[HandlerFunc] = []
 
+        # Connection event handlers
+        self.disconnect_handlers: list[HandlerFunc] = []
+        self.reconnecting_handlers: list[HandlerFunc] = []
+        self.reconnected_handlers: list[HandlerFunc] = []
+        self.reconnect_failed_handlers: list[HandlerFunc] = []
+
         # Error handlers
         self.error_handlers: list[ErrorHandlerFunc] = []
         self.socket_error_handlers: list[SocketErrorHandlerFunc] = []
@@ -107,6 +113,22 @@ class EventHandlers:
         """Add a handler for user list updates."""
         self.names_handlers.append(handler)
 
+    def add_disconnect_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for disconnection events."""
+        self.disconnect_handlers.append(handler)
+
+    def add_reconnecting_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for reconnection attempt events."""
+        self.reconnecting_handlers.append(handler)
+
+    def add_reconnected_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for successful reconnection events."""
+        self.reconnected_handlers.append(handler)
+
+    def add_reconnect_failed_handler(self, handler: HandlerFunc) -> None:
+        """Add a handler for failed reconnection events."""
+        self.reconnect_failed_handlers.append(handler)
+
     def add_error_handler(self, handler: ErrorHandlerFunc) -> None:
         """Add a handler for chat errors."""
         self.error_handlers.append(handler)
@@ -149,6 +171,10 @@ class EventHandlers:
         self.broadcast_handlers.clear()
         self.ping_handlers.clear()
         self.names_handlers.clear()
+        self.disconnect_handlers.clear()
+        self.reconnecting_handlers.clear()
+        self.reconnected_handlers.clear()
+        self.reconnect_failed_handlers.clear()
         self.error_handlers.clear()
         self.socket_error_handlers.clear()
         self.generic_handlers.clear()
@@ -159,11 +185,15 @@ class EventHandlers:
         from .models import (
             Ban,
             Broadcast,
+            DisconnectEvent,
             Message,
             Mute,
             Names,
             Ping,
             PrivateMessage,
+            ReconnectedEvent,
+            ReconnectFailedEvent,
+            ReconnectingEvent,
             RoomAction,
         )
 
@@ -197,6 +227,14 @@ class EventHandlers:
             self._call_handlers(self.ping_handlers, event, session)
         elif isinstance(event, Names):
             self._call_handlers(self.names_handlers, event, session)
+        elif isinstance(event, DisconnectEvent):
+            self._call_handlers(self.disconnect_handlers, event, session)
+        elif isinstance(event, ReconnectingEvent):
+            self._call_handlers(self.reconnecting_handlers, event, session)
+        elif isinstance(event, ReconnectedEvent):
+            self._call_handlers(self.reconnected_handlers, event, session)
+        elif isinstance(event, ReconnectFailedEvent):
+            self._call_handlers(self.reconnect_failed_handlers, event, session)
 
     def dispatch_error(self, error_message: str, session: Any) -> None:
         """Dispatch an error to error handlers."""
